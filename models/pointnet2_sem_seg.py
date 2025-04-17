@@ -3,8 +3,7 @@ import torch.nn.functional as F
 # from models.pointnet2_utils import PointNetSetAbstraction, PointNetFeaturePropagation, PointNetSetAbstractionKPconv, \
 #     PointNetSetAbstractionAttention
 from models.pointnet2_utils import *
-from models.pointnet2_utils import PointNetSetAbstractionMsg, PointNetFeaturePropagation, \
-    PointNetSetAbstractionMsgAttention
+from models.pointnet2_utils import PointNetFeaturePropagation
 
 from block.normal import ContraNorm
 

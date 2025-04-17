@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from time import time
 import numpy as np
 from block.GLFN import GLFN
-from block.rbkan import *
+# from block.rbkan import *
 
 def timeit(tag, t):
     print("{}: {}s".format(tag, time() - t))
@@ -210,7 +210,7 @@ class Konv(nn.Module):
     # Standard convolution
     def __init__(self, c1, c2, k=1):  # ch_in, ch_out, kernel, stride, padding, groups
         super(Conv, self).__init__()
-        self.conv = FastKANConv2DLayer(c1, c2, kernel_size=k, padding=k//2)  # 使用 FastKANConv2DLayer 替换 nn.Conv2d
+        self.conv = nn.Conv2d(c1, c2, kernel_size=k, padding=k//2)  # 使用 FastKANConv2DLayer 替换 nn.Conv2d
         self.bn = nn.BatchNorm2d(c2)
         self.act = nn.ReLU()
 
@@ -261,7 +261,7 @@ class PointNetSetAbstractionAttention1(nn.Module):
         self.radius = radius
         self.nsample = nsample
         #self.mlp_conv1 = Conv(in_channel, mlp[0], 1)
-        self.mlp_conv1 = FastKANConv2DLayer(in_channel, mlp[0], kernel_size=3, padding=3 // 2)
+        self.mlp_conv1 = nn.Conv2d(in_channel, mlp[0], kernel_size=3, padding=3 // 2)
 
 
         self.mlp_attention = GLFN(mlp[0]) 

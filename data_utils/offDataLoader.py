@@ -110,11 +110,10 @@ class PointCloudDataset(Dataset):
         pcd_path = self.files[idx]
         label = self.labels[idx]
         pointcloud = self.__preproc__(pcd_path)
-        return {'pointcloud': pointcloud, 
-                'category': label}
+        return pointcloud, label
 
 
-    def read_off(file_path):
+    def read_off(self, file_path):
         """ Reads an OFF file and extracts the vertex data as a NumPy array. """
         with open(file_path, 'r') as file:
             off_header = file.readline().strip()

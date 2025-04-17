@@ -3,6 +3,7 @@ import argparse
 import os
 from ptflops import get_model_complexity_info
 from data_utils.offDataLoader import PointCloudDataset
+from utils.provider import Provider
 import torch
 import datetime
 import logging
@@ -225,7 +226,7 @@ def main(args):
             optimizer.zero_grad()
 
             points = points.data.numpy()
-            points[:, :, :3] = provider.rotate_point_cloud_z(points[:, :, :3])
+            # points[:, :, :3] = Provider.rotate_point_cloud_in_z(points[:, :, :3])
             points = torch.Tensor(points)
             points, target = points.float().cuda(), target.long().cuda()
             points = points.transpose(2, 1)
