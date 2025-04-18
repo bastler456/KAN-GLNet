@@ -108,9 +108,10 @@ class PointCloudDataset(Dataset):
 
     def __getitem__(self, idx):
         pcd_path = self.files[idx]
-        label = self.labels[idx]
+        label = self.labels[idx]  # this is a single int
         pointcloud = self.__preproc__(pcd_path)
-        return pointcloud, label
+        label_per_point = np.full((pointcloud.shape[0],), label, dtype=np.int64)  # e.g. [0, 0, 0, ..., 0]
+        return pointcloud, torch.from_numpy(label_per_point)
 
 
     def read_off(self, file_path):
