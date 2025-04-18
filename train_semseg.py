@@ -34,8 +34,8 @@ def inplace_relu(m):
 def parse_args():
     parser = argparse.ArgumentParser('Model')
     parser.add_argument('--model', type=str, default='pointnet2_sem_seg', help='model name [default: pointnet_sem_seg]')
-    parser.add_argument('--batch_size', type=int, default=8, help='Batch Size during training [default: 16]')
-    parser.add_argument('--epoch', default=300, type=int, help='Epoch to run [default: 32]')
+    parser.add_argument('--batch_size', type=int, default=32, help='Batch Size during training [default: 16]')
+    parser.add_argument('--epoch', default=1, type=int, help='Epoch to run [default: 32]')
     parser.add_argument('--learning_rate', default=0.01, type=float, help='Initial learning rate [default: 0.001]')
     parser.add_argument('--gpu', type=str, default='0', help='GPU to use [default: GPU 0]')
     parser.add_argument('--optimizer', type=str, default='AdamW', help='Adam or SGD or AdamW or Lion or SophiaG [default: Adam]')
@@ -123,7 +123,7 @@ def main(args):
 
     try:
         with torch.cuda.device(0):
-            macs, params = get_model_complexity_info(classifier, (9, args.npoint), as_strings=False,
+            macs, params = get_model_complexity_info(classifier, (3, args.npoint), as_strings=False,
                                                      print_per_layer_stat=False)
             flops = macs * 2
             flops_g = flops / 1e9
@@ -134,7 +134,7 @@ def main(args):
 
 
     classifier.eval()
-    dummy_input = torch.randn(8, 9, 4096).cuda()
+    dummy_input = torch.randn(8, 3, 4096).cuda()
 
 
     start_time = time.time()
@@ -224,12 +224,16 @@ def main(args):
 
         for i, (points, target) in tqdm(enumerate(trainDataLoader), total=len(trainDataLoader), smoothing=0.9):
             optimizer.zero_grad()
-
+            print(points.shape)
+            print(target.shape)
             points = points.data.numpy()
             # points[:, :, :3] = Provider.rotate_point_cloud_in_z(points[:, :, :3])
             points = torch.Tensor(points)
             points, target = points.float().cuda(), target.long().cuda()
             points = points.transpose(2, 1)
+
+            print(points.shape)
+            print(target.shape)
 
             seg_pred, trans_feat = classifier(points)
             seg_pred = seg_pred.contiguous().view(-1, NUM_CLASSES)
