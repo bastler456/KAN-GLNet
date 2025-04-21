@@ -38,7 +38,7 @@ def parse_args():
     parser = argparse.ArgumentParser('Model')
     parser.add_argument('--model', type=str, default='pointnet2_sem_seg', help='model name [default: pointnet_sem_seg]')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch Size during training [default: 16]')
-    parser.add_argument('--epoch', default=10, type=int, help='Epoch to run [default: 32]')
+    parser.add_argument('--epoch', default=3, type=int, help='Epoch to run [default: 32]')
     parser.add_argument('--learning_rate', default=0.01, type=float, help='Initial learning rate [default: 0.001]')
     parser.add_argument('--gpu', type=str, default='0', help='GPU to use [default: GPU 0]')
     parser.add_argument('--optimizer', type=str, default='AdamW', help='Adam or SGD or AdamW or Lion or SophiaG [default: Adam]')
@@ -255,7 +255,7 @@ def main(args):
 
         if epoch % 5 == 0:
             logger.info('Save model...')
-            savepath = str(checkpoints_dir) + '/model.pth'
+            savepath = str(checkpoints_dir) + f'/{args.model}.pth'
             log_string('Saving at %s' % savepath)
             state = {
                 'epoch': epoch,
