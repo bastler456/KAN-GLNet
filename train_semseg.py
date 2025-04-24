@@ -3,6 +3,7 @@ import argparse
 import os
 from ptflops import get_model_complexity_info
 from data_utils.offDataLoader import PointCloudDataset
+from data_utils.pcdDataLoader import HierarchicalPointCloudDataset
 from utils.provider import Provider
 import torch
 import datetime
@@ -19,10 +20,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = BASE_DIR
 sys.path.append(os.path.join(ROOT_DIR, 'models'))
 
-classes = ['airplanes', 'bathtub', 'bed', 'bench', 'bookshelf', 'bottle', 'bowl', 'car', 'chair', 'cone', 'cup',
-           'curtain', 'desk', 'door', 'dresser', 'flower_pot', 'glass_box', 'guitar', 'keyboard', 'lamp', 'laptop', 
-           'mantel', 'monitor', 'night_stand', 'person', 'piano', 'plant', 'radio', 'range_hood', 'sink', 'sofa',
-           'stairs', 'stool', 'table', 'tent', 'toilet', 'tv_stand', 'vase', 'wardrobe', 'xbox']
+classes = ['scanned_object', 'box']
+numb_of_classes: int = [len(classes)]
 class2label = {cls: i for i, cls in enumerate(classes)}
 seg_classes = class2label
 seg_label_to_cat = {}
@@ -37,8 +36,8 @@ def inplace_relu(m):
 def parse_args():
     parser = argparse.ArgumentParser('Model')
     parser.add_argument('--model', type=str, default='pointnet2_sem_seg', help='model name [default: pointnet_sem_seg]')
-    parser.add_argument('--batch_size', type=int, default=32, help='Batch Size during training [default: 16]')
-    parser.add_argument('--epoch', default=3, type=int, help='Epoch to run [default: 32]')
+    parser.add_argument('--batch_size', type=int, default=4, help='Batch Size during training [default: 16]')
+    parser.add_argument('--epoch', default=100, type=int, help='Epoch to run [default: 32]')
     parser.add_argument('--learning_rate', default=0.01, type=float, help='Initial learning rate [default: 0.001]')
     parser.add_argument('--gpu', type=str, default='0', help='GPU to use [default: GPU 0]')
     parser.add_argument('--optimizer', type=str, default='AdamW', help='Adam or SGD or AdamW or Lion or SophiaG [default: Adam]')
@@ -88,21 +87,24 @@ def main(args):
     log_string('PARAMETER ...')
     log_string(args)
 
-    NUM_CLASSES = 40 #!!!
+    NUM_CLASSES = numb_of_classes[0]
     NUM_POINT = args.npoint
     BATCH_SIZE = args.batch_size
 
-    data_path = Path('data/ModelNet40')
+    data_path = Path('data/test_dataset')
     data_path.absolute()
 
+    TRAIN_DATASET = HierarchicalPointCloudDataset(str(data_path), split='train')
+    TEST_DATASET = HierarchicalPointCloudDataset(str(data_path), split='test')
 
-    TRAIN_DATASET = PointCloudDataset(str(data_path))
-    TEST_DATASET = PointCloudDataset(data_path, valid=True, get_testset=True)
-
-    trainDataLoader = torch.utils.data.DataLoader(TRAIN_DATASET, batch_size=BATCH_SIZE, shuffle=True, num_workers=6,
+    trainDataLoader = torch.utils.data.DataLoader(TRAIN_DATASET, batch_size=BATCH_SIZE, 
+                                                  shuffle=True, 
+                                                  collate_fn=TRAIN_DATASET.custom_collate_fn, num_workers=6,
                                                   pin_memory=True, drop_last=True,
                                                   worker_init_fn=lambda x: np.random.seed(x + int(time.time())))
-    testDataLoader = torch.utils.data.DataLoader(TEST_DATASET, batch_size=BATCH_SIZE, shuffle=False, num_workers=6,
+    testDataLoader = torch.utils.data.DataLoader(TEST_DATASET, batch_size=BATCH_SIZE,
+                                                 shuffle=False, collate_fn=TRAIN_DATASET.custom_collate_fn,
+                                                 num_workers=6,
                                                  pin_memory=True, drop_last=True)
                                                  
     # weights = torch.Tensor(TRAIN_DATASET.labelweights).cuda()
@@ -209,6 +211,8 @@ def main(args):
     global_epoch = 0
     best_iou = 0
 
+    
+
     for epoch in range(start_epoch, args.epoch):
         '''Train on chopped scenes'''
         log_string('**** Epoch %d (%d/%s) ****' % (global_epoch + 1, epoch + 1, args.epoch))
@@ -227,27 +231,32 @@ def main(args):
         loss_sum = 0
         classifier = classifier.train()
 
-        for i, (points, target) in tqdm(enumerate(trainDataLoader), total=len(trainDataLoader), smoothing=0.9):
-            optimizer.zero_grad()
-            points = points.data.numpy()
-            # points[:, :, :3] = Provider.rotate_point_cloud_in_z(points[:, :, :3])
-            points = torch.Tensor(points)
-            points, target = points.float().cuda(), target.long().cuda()
-            points = points.transpose(2, 1)
-            seg_pred, trans_feat = classifier(points)
-            seg_pred = seg_pred.contiguous().view(-1, NUM_CLASSES)
+        print(f"num of baches = {num_batches}")
 
-            batch_label = target.view(-1, 1)[:, 0].cpu().data.numpy()
-            target = target.view(-1, 1)[:, 0]
-            loss = criterion(seg_pred, target, trans_feat, weights)
-            loss.backward()
-            optimizer.step()
+        for i, (points_list, target_list) in tqdm(enumerate(trainDataLoader), total=len(trainDataLoader), smoothing=0.9):
+            for points, target in zip(points_list, target_list):
+                optimizer.zero_grad()
+                points = points.data.numpy()
+                # points[:, :, :3] = Provider.rotate_point_cloud_in_z(points[:, :, :3])
+                points = torch.Tensor(points)
+                points, target = points.float().cuda(), target.long().cuda()
+                points = points.unsqueeze(0)
 
-            pred_choice = seg_pred.cpu().data.max(1)[1].numpy()
-            correct = np.sum(pred_choice == batch_label)
-            total_correct += correct
-            total_seen += (BATCH_SIZE * NUM_POINT)
-            loss_sum += loss
+                points = points.transpose(2, 1)
+                seg_pred, trans_feat = classifier(points)
+                seg_pred = seg_pred.contiguous().view(-1, NUM_CLASSES)
+
+                batch_label = target.view(-1, 1)[:, 0].cpu().data.numpy()
+                target = target.view(-1, 1)[:, 0]
+                loss = criterion(seg_pred, target, trans_feat, weights)
+                loss.backward()
+                optimizer.step()
+
+                pred_choice = seg_pred.cpu().data.max(1)[1].numpy()
+                correct = np.sum(pred_choice == batch_label)
+                total_correct += correct
+                total_seen += (BATCH_SIZE * NUM_POINT)
+                loss_sum += loss
 
         log_string(num_batches)
         log_string('Training mean loss: %f' % (loss_sum / num_batches))
@@ -279,30 +288,32 @@ def main(args):
 
             log_string('---- EPOCH %03d EVALUATION ----' % (global_epoch + 1))
             for i, (points, target) in tqdm(enumerate(testDataLoader), total=len(testDataLoader), smoothing=0.9):
-                points = points.data.numpy()
-                points = torch.Tensor(points)
-                points, target = points.float().cuda(), target.long().cuda()
-                points = points.transpose(2, 1)
+                for points, target in zip(points_list, target_list):
+                    points = points.data.numpy()
+                    points = torch.Tensor(points)
+                    points, target = points.float().cuda(), target.long().cuda()
+                    points = points.unsqueeze(0)
+                    points = points.transpose(2, 1)
 
-                seg_pred, trans_feat = classifier(points)
-                pred_val = seg_pred.contiguous().cpu().data.numpy()
-                seg_pred = seg_pred.contiguous().view(-1, NUM_CLASSES)
+                    seg_pred, trans_feat = classifier(points)
+                    pred_val = seg_pred.contiguous().cpu().data.numpy()
+                    seg_pred = seg_pred.contiguous().view(-1, NUM_CLASSES)
 
-                batch_label = target.cpu().data.numpy()
-                target = target.view(-1, 1)[:, 0]
-                loss = criterion(seg_pred, target, trans_feat, weights)
-                loss_sum += loss
-                pred_val = np.argmax(pred_val, 2)
-                correct = np.sum((pred_val == batch_label))
-                total_correct += correct
-                total_seen += (BATCH_SIZE * NUM_POINT)
-                tmp, _ = np.histogram(batch_label, range(NUM_CLASSES + 1))
-                labelweights += tmp
+                    batch_label = target.cpu().data.numpy()
+                    target = target.view(-1, 1)[:, 0]
+                    loss = criterion(seg_pred, target, trans_feat, weights)
+                    loss_sum += loss
+                    pred_val = np.argmax(pred_val, 2)
+                    correct = np.sum((pred_val == batch_label))
+                    total_correct += correct
+                    total_seen += (BATCH_SIZE * NUM_POINT)
+                    tmp, _ = np.histogram(batch_label, range(NUM_CLASSES + 1))
+                    labelweights += tmp
 
-                for l in range(NUM_CLASSES):
-                    total_seen_class[l] += np.sum((batch_label == l))
-                    total_correct_class[l] += np.sum((pred_val == l) & (batch_label == l))
-                    total_iou_deno_class[l] += np.sum(((pred_val == l) | (batch_label == l)))
+                    for l in range(NUM_CLASSES):
+                        total_seen_class[l] += np.sum((batch_label == l))
+                        total_correct_class[l] += np.sum((pred_val == l) & (batch_label == l))
+                        total_iou_deno_class[l] += np.sum(((pred_val == l) | (batch_label == l)))
 
             labelweights = labelweights.astype(np.float32) / np.sum(labelweights.astype(np.float32))
             mIoU = np.mean(np.array(total_correct_class) / (np.array(total_iou_deno_class, dtype=np.float64) + 1e-6))
