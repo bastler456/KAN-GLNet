@@ -4,7 +4,7 @@ import os
 from ptflops import get_model_complexity_info
 from data_utils.offDataLoader import PointCloudDataset
 from data_utils.pcdDataLoader import HierarchicalPointCloudDataset
-from utils.provider import Provider
+import utils.provider
 import torch
 import datetime
 import logging
@@ -37,10 +37,10 @@ def parse_args():
     parser = argparse.ArgumentParser('Model')
     parser.add_argument('--model', type=str, default='pointnet2_sem_seg', help='model name [default: pointnet_sem_seg]')
     parser.add_argument('--batch_size', type=int, default=4, help='Batch Size during training [default: 16]')
-    parser.add_argument('--epoch', default=100, type=int, help='Epoch to run [default: 32]')
+    parser.add_argument('--epoch', default=10, type=int, help='Epoch to run [default: 32]')
     parser.add_argument('--learning_rate', default=0.01, type=float, help='Initial learning rate [default: 0.001]')
     parser.add_argument('--gpu', type=str, default='0', help='GPU to use [default: GPU 0]')
-    parser.add_argument('--optimizer', type=str, default='AdamW', help='Adam or SGD or AdamW or Lion or SophiaG [default: Adam]')
+    parser.add_argument('--optimizer', type=str, default='Adam', help='Adam or SGD or AdamW or Lion or SophiaG [default: Adam]')
     parser.add_argument('--log_dir', type=str, default='pointnet2_sem_seg', help='Log path [default: None]')
     parser.add_argument('--decay_rate', type=float, default=1e-4, help='weight decay [default: 1e-4]')
     parser.add_argument('--npoint', type=int, default=4096, help='Point Number [default: 4096]')
@@ -122,48 +122,14 @@ def main(args):
     criterion = MODEL.get_loss().cuda()
     classifier.apply(inplace_relu)
 
-
-    num_params = sum(p.numel() for p in classifier.parameters())
-    num_params_m = num_params / 1e6
-    log_string(f'Paramer: {num_params_m:.4f} M')
-
-
-    try:
-        with torch.cuda.device(0):
-            macs, params = get_model_complexity_info(classifier, (3, args.npoint), as_strings=False,
-                                                     print_per_layer_stat=False)
-            flops = macs * 2
-            flops_g = flops / 1e9
-            log_string(f'FLOPs: {flops_g:.4f} GFLOPs')
-
-    except RuntimeError as e:
-        log_string(f'FLOPs wrong: {e}')
-
-
-    classifier.eval()
-    dummy_input = torch.randn(8, 3, 4096).cuda()
-
-
-    start_time = time.time()
-    with torch.no_grad():
-        _ = classifier(dummy_input)
-    end_time = time.time()
-
-    inference_time = end_time - start_time
-    log_string(f'time: {inference_time:.6f} s')
-
-
     def weights_init(m):
-
         classname = m.__class__.__name__
-
-
-        if hasattr(m, 'weight') and (classname.find('Conv') != -1 or classname.find('Linear') != -1):
-
-            torch.nn.init.xavier_normal_(m.weight.data, gain=0.02)
-
-            if hasattr(m, 'bias') and m.bias is not None:
-                torch.nn.init.constant_(m.bias.data, 0.0)
+        if classname.find('Conv2d') != -1:
+            torch.nn.init.xavier_normal_(m.weight.data)
+            torch.nn.init.constant_(m.bias.data, 0.0)
+        elif classname.find('Linear') != -1:
+            torch.nn.init.xavier_normal_(m.weight.data)
+            torch.nn.init.constant_(m.bias.data, 0.0)
 
 
 
@@ -237,7 +203,7 @@ def main(args):
             for points, target in zip(points_list, target_list):
                 optimizer.zero_grad()
                 points = points.data.numpy()
-                # points[:, :, :3] = Provider.rotate_point_cloud_in_z(points[:, :, :3])
+                points[:, :3,] = utils.provider.rotate_point_cloud_z(points[:, :3])
                 points = torch.Tensor(points)
                 points, target = points.float().cuda(), target.long().cuda()
                 points = points.unsqueeze(0)
@@ -302,7 +268,7 @@ def main(args):
                     batch_label = target.cpu().data.numpy()
                     target = target.view(-1, 1)[:, 0]
                     loss = criterion(seg_pred, target, trans_feat, weights)
-                    loss_sum += loss
+                    loss_sum += loss.item()
                     pred_val = np.argmax(pred_val, 2)
                     correct = np.sum((pred_val == batch_label))
                     total_correct += correct
