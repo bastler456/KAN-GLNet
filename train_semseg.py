@@ -37,10 +37,10 @@ def parse_args():
     parser = argparse.ArgumentParser('Model')
     parser.add_argument('--model', type=str, default='pointnet2_sem_seg', help='model name [default: pointnet_sem_seg]')
     parser.add_argument('--batch_size', type=int, default=4, help='Batch Size during training [default: 16]')
-    parser.add_argument('--epoch', default=100, type=int, help='Epoch to run [default: 32]')
+    parser.add_argument('--epoch', default=10, type=int, help='Epoch to run [default: 32]')
     parser.add_argument('--learning_rate', default=0.01, type=float, help='Initial learning rate [default: 0.001]')
     parser.add_argument('--gpu', type=str, default='0', help='GPU to use [default: GPU 0]')
-    parser.add_argument('--optimizer', type=str, default='AdamW', help='Adam or SGD or AdamW or Lion or SophiaG [default: Adam]')
+    parser.add_argument('--optimizer', type=str, default='Adam', help='Adam or SGD or AdamW or Lion or SophiaG [default: Adam]')
     parser.add_argument('--log_dir', type=str, default='pointnet2_sem_seg', help='Log path [default: None]')
     parser.add_argument('--decay_rate', type=float, default=1e-4, help='weight decay [default: 1e-4]')
     parser.add_argument('--npoint', type=int, default=4096, help='Point Number [default: 4096]')
@@ -121,37 +121,6 @@ def main(args):
     classifier = MODEL.get_model(NUM_CLASSES).cuda()
     criterion = MODEL.get_loss().cuda()
     classifier.apply(inplace_relu)
-
-
-    num_params = sum(p.numel() for p in classifier.parameters())
-    num_params_m = num_params / 1e6
-    log_string(f'Paramer: {num_params_m:.4f} M')
-
-
-    try:
-        with torch.cuda.device(0):
-            macs, params = get_model_complexity_info(classifier, (3, args.npoint), as_strings=False,
-                                                     print_per_layer_stat=False)
-            flops = macs * 2
-            flops_g = flops / 1e9
-            log_string(f'FLOPs: {flops_g:.4f} GFLOPs')
-
-    except RuntimeError as e:
-        log_string(f'FLOPs wrong: {e}')
-
-
-    classifier.eval()
-    dummy_input = torch.randn(8, 3, 4096).cuda()
-
-
-    start_time = time.time()
-    with torch.no_grad():
-        _ = classifier(dummy_input)
-    end_time = time.time()
-
-    inference_time = end_time - start_time
-    log_string(f'time: {inference_time:.6f} s')
-
 
     def weights_init(m):
 

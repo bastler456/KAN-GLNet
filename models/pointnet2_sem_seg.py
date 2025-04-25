@@ -10,11 +10,6 @@ from block.normal import ContraNorm
 class get_model(nn.Module):
     def __init__(self, num_classes):
         super(get_model, self).__init__()
-        # self.sa1 = PointNetSetAbstraction(1024, 0.01, 32, 9 + 3, [32, 32, 64], False)
-        # self.sa2 = PointNetSetAbstraction(256, 0.02, 32, 64 + 3, [64, 64, 128], False)
-        # self.sa3 = PointNetSetAbstraction(64, 0.04, 32, 128 + 3, [128, 128, 256], False)
-        #self.sa4 = PointNetSetAbstraction(16, 0.08, 32, 256 + 3, [256, 256, 512], False)
-         #PointNetSetAbstractionAttention1
         self.sa1 = PointNetSetAbstractionAttention1(1024, 0.1, 32, 3 + 3, [32, 32, 64], False)
         self.sa2 = PointNetSetAbstractionAttention1(256, 0.2, 32, 64 + 3, [64, 64, 128], False)
         self.sa3 = PointNetSetAbstractionAttention1(64, 0.4, 32, 128 + 3, [128, 128, 256], False)
@@ -26,14 +21,10 @@ class get_model(nn.Module):
 
 
         self.conv1 = nn.Conv1d(128, 128, 1)
-        #self.bn1 = nn.BatchNorm1d(128)
+        self.bn1 = nn.BatchNorm1d(128)
         self.bn1 = ContraNorm(128) #ContraNorm
         self.drop1 = nn.Dropout(0.5)
         self.conv2 = nn.Conv1d(128, num_classes, kernel_size=1, padding=0)
-        # self.conv1 = FastKANConv1DLayer(128, 128, kernel_size=1)
-        # self.bn1 = nn.BatchNorm1d(128)
-        # self.drop1 = nn.Dropout(0.5)
-        # self.conv2 = FastKANConv1DLayer(128, num_classes, kernel_size=1)
 
 
 
